@@ -29,8 +29,6 @@
 #include <vector_types.h>
 #include <vector_functions.h>
 #include "device_launch_parameters.h"
-//#include <builtin_types.h>
-//#include "cutil_math.h"
 #include "cutil_math.h"
 #include "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v6.5\extras\CUPTI\include\GL\glew.h"
 #include "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v6.5\extras\CUPTI\include\GL\glut.h"
@@ -38,15 +36,7 @@
 #include <cuda_gl_interop.h>
 #include <curand.h>
 #include <curand_kernel.h>
-#include <sstream>
-#include <fstream>
-#include <algorithm>
-#include <map>
-#include <cfloat>
-#include <algorithm>
-#include <assert.h>
-#include <list>
-#include <stdarg.h>
+
 #include "cuda_pathtracer.h"
 
 #define M_PI 3.1415926535897932384626422832795028841971f
@@ -112,16 +102,6 @@ struct Sphere {
 
 __device__ Sphere spheres[] = {
 
-	//{ 1e5f, { 1e5f - 2.0f, 0.f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.75f, 0.25f, 0.25f }, DIFF }, //Left 1e5f
-	//{ 1e5f, { -1e5f + 2.0f, 0.f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { .25f, .25f, .75f }, DIFF }, //Rght 
-	//{ 1e5f, { 0.0f, 0.f, 1e5f - 3}, { 0.0f, 0.0f, 0.0f }, { .75f, .75f, .75f }, DIFF }, //Back 
-	//{ 1e5f, { 50.0f, 40.8f, -1e5f + 600.0f }, { 0.0f, 0.0f, 0.0f }, { 0.00f, 0.00f, 0.00f }, DIFF }, //Frnt 
-	//{ 1e5f, { 0.0f, -1e5f - 0.7, 0.6f }, { 0.0f, 0.0f, 0.0f }, { .75f, .75f, .75f }, DIFF }, //Botm 
-	//{ 1e5f, { 0.0f, 1e5f + 1.2f, 0.6f }, { 0.0f, 0.0f, 0.0f }, { .75f, .75f, .75f }, DIFF }, //Top 
-	//{ 16.5f, { 27.0f, 16.5f, 47.0f }, { 0.0f, 0.0f, 0.0f }, { 0.99f, 0.99f, 0.99f }, SPEC }, // small sphere 1
-	//{ 16.5f, { 73.0f, 16.5f, 78.0f }, { 0.0f, 0.0f, 0.0f }, { 0.99f, 0.99f, 0.99f }, SPEC }, // small sphere 2
-	//{ 600.0f, { 50.0f, 681.6f - .5f, 81.6f }, { 12.0f, 10.0f, 8.0f }, { 0.0f, 0.0f, 0.0f }, DIFF }  // Light
-
 	// sun
 	{ 1.6, { 0.0f, 2.8, 0 }, { 6, 4, 2 }, { 0.f, 0.f, 0.f }, DIFF },  // 37, 34, 30  X: links rechts Y: op neer
 	//{ 1600, { 3000.0f, 10, 6000 }, { 17, 14, 10 }, { 0.f, 0.f, 0.f }, DIFF },
@@ -180,8 +160,6 @@ __device__ bool RayIntersectsBox(const Vector3Df& originInWorldSpace, const Vect
 	//             return false
 	//     end
 	// end of for loop
-	//
-	// If Box survived all above tests, return true with intersection point Tnear and exit point Tfar.
 
 	float Tnear, Tfar;
 	Tnear = -FLT_MAX;
@@ -189,6 +167,7 @@ __device__ bool RayIntersectsBox(const Vector3Df& originInWorldSpace, const Vect
 
 	float2 limits;
 
+// box intersection routine
 #define CHECK_NEAR_AND_FAR_INTERSECTION(c)							    \
     if (rayInWorldSpace.##c == 0.f) {						    \
 	if (originInWorldSpace.##c < limits.x) return false;					    \
@@ -213,14 +192,19 @@ __device__ bool RayIntersectsBox(const Vector3Df& originInWorldSpace, const Vect
 	//limits = make_float2(cudaBVHlimits[6 * boxIdx + 4], cudaBVHlimits[6 * boxIdx + 5]);
 	CHECK_NEAR_AND_FAR_INTERSECTION(z)
 
+	// If Box survived all above tests, return true with intersection point Tnear and exit point Tfar.
 	return true;
 }
 
 
 //////////////////////////////////////////
-//		BVH intersection routine		//
-//		using CUDA texture memory		//
+//	BVH intersection routine	//
+//	using CUDA texture memory	//
 //////////////////////////////////////////
+
+// there are 3 forms of the BVH: a "pure" BVH, a cache-friendly BVH (taking up less memory space than the pure BVH)
+// and a "textured" BVH which stores its data in CUDA texture memory (which is cached). The last one is gives the 
+// best performance and is used here.
 
 __device__ bool BVH_IntersectTriangles(
 	int* cudaBVHindexesOrTrilists, const Vector3Df& origin, const Vector3Df& ray, unsigned avoidSelf,
@@ -241,9 +225,11 @@ __device__ bool BVH_IntersectTriangles(
 
 	// while the stack is not empty
 	while (stackIdx) {
+		
 		// pop a BVH node (or AABB, Axis Aligned Bounding Box) from the stack
 		int boxIdx = stack[stackIdx - 1];
 		//uint* pCurrent = &cudaBVHindexesOrTrilists[boxIdx]; 
+		
 		// decrement the stackindex
 		stackIdx--;
 
@@ -265,12 +251,15 @@ __device__ bool BVH_IntersectTriangles(
 
 			// if ray intersects inner node, push indices of left and right child nodes on the stack
 			if (RayIntersectsBox(origin, ray, boxIdx)) {
+				
 				//stack[stackIdx++] = pCurrent->u.inner._idxRight;
 				//stack[stackIdx++] = cudaBVHindexesOrTrilists[4 * boxIdx + 1];
-				stack[stackIdx++] = data.y; // left child node index
+				stack[stackIdx++] = data.y; // right child node index
+				
 				//stack[stackIdx++] = pCurrent->u.inner._idxLeft;
 				//stack[stackIdx++] = cudaBVHindexesOrTrilists[4 * boxIdx + 2];
-				stack[stackIdx++] = data.z; // right child node index
+				stack[stackIdx++] = data.z; // left child node index
+				
 				// return if stack size is exceeded
 				if (stackIdx>BVH_STACK_SIZE)
 				{
@@ -281,20 +270,21 @@ __device__ bool BVH_IntersectTriangles(
 		else { // LEAF NODE
 
 			// original, "pure" BVH form...
-			//BVHLeaf *p = dynamic_cast<BVHLeaf*>(pCurrent);
-			//for(std::list<const Triangle*>::iterator it=p->_triangles.begin();
+			// BVHLeaf *p = dynamic_cast<BVHLeaf*>(pCurrent);
+			// for(std::list<const Triangle*>::iterator it=p->_triangles.begin();
 			//    it != p->_triangles.end();
 			//    it++)
 
 			// cache-friendly BVH form...
-			//for(unsigned i=pCurrent->u.leaf._startIndexInTriIndexList;
+			// for(unsigned i=pCurrent->u.leaf._startIndexInTriIndexList;
 			//    i<pCurrent->u.leaf._startIndexInTriIndexList + (pCurrent->u.leaf._count & 0x7fffffff);
 
 			// texture memory BVH form...
 			// for (unsigned i = cudaBVHindexesOrTrilists[4 * boxIdx + 3]; i< cudaBVHindexesOrTrilists[4 * boxIdx + 3] + (cudaBVHindexesOrTrilists[4 * boxIdx + 0] & 0x7fffffff); i++) { // data.w = number of triangles in leaf
+			
 			// loop over every triangle in the leaf node
 			// data.w is start index in triangle list
-			// data.x is number of triangles in leafnode (the bitwise AND operation extracts the triangle number)
+			// data.x stores number of triangles in leafnode (the bitwise AND operation extracts the triangle number)
 			for (unsigned i = data.w; i < data.w + (data.x & 0x7fffffff); i++) {
 				
 				// original, "pure" BVH form...
@@ -330,16 +320,19 @@ __device__ bool BVH_IntersectTriangles(
 				Vector3Df hit = ray * s;
 				hit += origin;
 
-				// ray traingle intersection
+				// ray triangle intersection
 				// Is the intersection of the ray with the triangle's plane INSIDE the triangle?
+				
 				float4 ee1 = tex1Dfetch(g_trianglesTexture, 5 * idx + 2);
 				//float4 ee1 = make_float4(cudaTriangleIntersectionData[20 * idx + 8], cudaTriangleIntersectionData[20 * idx + 9], cudaTriangleIntersectionData[20 * idx + 10], cudaTriangleIntersectionData[20 * idx + 11]);
 				float kt1 = dot(ee1, hit) - ee1.w; 
 				if (kt1<0.0f) continue;
+				
 				float4 ee2 = tex1Dfetch(g_trianglesTexture, 5 * idx + 3);
 				//float4 ee2 = make_float4(cudaTriangleIntersectionData[20 * idx + 12], cudaTriangleIntersectionData[20 * idx + 13], cudaTriangleIntersectionData[20 * idx + 14], cudaTriangleIntersectionData[20 * idx + 15]);
 				float kt2 = dot(ee2, hit) - ee2.w; 
 				if (kt2<0.0f) continue;
+				
 				float4 ee3 = tex1Dfetch(g_trianglesTexture, 5 * idx + 4);
 				//float4 ee3 = make_float4(cudaTriangleIntersectionData[20 * idx + 16], cudaTriangleIntersectionData[20 * idx + 17], cudaTriangleIntersectionData[20 * idx + 18], cudaTriangleIntersectionData[20 * idx + 19]);
 				float kt3 = dot(ee3, hit) - ee3.w; 
@@ -350,12 +343,14 @@ __device__ bool BVH_IntersectTriangles(
 					// is this intersection closer than all the others?
 					float hitZ = distancesq(origin, hit);
 					if (hitZ < bestTriDist) {
+						
 						// maintain the closest hit
 						bestTriDist = hitZ;
 						hitdist = sqrtf(bestTriDist);
 						pBestTriIdx = idx;
 						pointHitInWorldSpace = hit;
-						// store barycentric coordinates (for texturing)
+						
+						// store barycentric coordinates (for texturing, not used for now)
 						kAB = kt1;
 						kBC = kt2;
 						kCA = kt3;
@@ -367,6 +362,10 @@ __device__ bool BVH_IntersectTriangles(
 	
 	return pBestTriIdx != -1;
 }
+
+//////////////////////
+// PATH TRACING
+//////////////////////
 
 __device__ Vector3Df path_trace(curandState *randstate, Vector3Df originInWorldSpace, Vector3Df rayInWorldSpace, int avoidSelf,
 	Triangle *pTriangles, int* cudaBVHindexesOrTrilists, float* cudaBVHlimits, float* cudaTriangleIntersectionData, int* cudaTriIdxList)
@@ -413,10 +412,10 @@ __device__ Vector3Df path_trace(curandState *randstate, Vector3Df originInWorldS
 
 		// intersect all spheres in the scene
 		float numspheres = sizeof(spheres) / sizeof(Sphere);
-		for (int i = int(numspheres); i--;)  // for all spheres in scene
+		for (int i = int(numspheres); i--;){  // for all spheres in scene
 			// keep track of distance from origin to closest intersection point
 			if ((d = spheres[i].intersect(Ray(rayorig, raydir))) && d < scene_t){ scene_t = d; sphere_id = i; geomtype = 1; }
-
+		}
 		// set avoidSelf to current triangle index to avoid intersection between this triangle and the next ray, 
 		// so that we don't get self-shadow or self-reflection from this triangle...
 		avoidSelf = pBestTriIdx;

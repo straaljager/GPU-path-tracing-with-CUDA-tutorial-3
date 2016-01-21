@@ -19,7 +19,7 @@ Features:
 - depth-of-field
 
 
-Instructions for compiling with Visual Studio 2013/2015
+Instructions for compiling with Visual Studio 2013/2015:
 
 - install the CUDA 6.5/7/7.5 toolkit and choose integration with Visual Studio
 - open VS2013/2015 (Express or any other version such as the free Community version)

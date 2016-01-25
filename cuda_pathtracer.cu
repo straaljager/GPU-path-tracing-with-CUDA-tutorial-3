@@ -725,7 +725,7 @@ __global__ void CoreLoopPathTracingKernel(Vector3Df* output, Vector3Df* accumbuf
 		Vector3Df originInWorldSpace = aperturePoint;
 
 		finalcol += path_trace(&randState, originInWorldSpace, rayInWorldSpace, -1, pTriangles, 
-			cudaBVHindexesOrTrilists, cudaBVHlimits, cudaTriangleIntersectionData, cudaTriIdxList);;
+			cudaBVHindexesOrTrilists, cudaBVHlimits, cudaTriangleIntersectionData, cudaTriIdxList) * (1.0f/samps);
 	}       
 
 	// add pixel colour to accumulation buffer (accumulates all samples) 

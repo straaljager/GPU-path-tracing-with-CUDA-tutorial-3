@@ -218,7 +218,10 @@ __device__ bool BVH_IntersectTriangles(
 	// start from infinity
 	bestTriDist = FLT_MAX;
 
+	// create a stack for each ray
+	// the stack is just a fixed size array of indices to BVH nodes
 	int stack[BVH_STACK_SIZE];
+	
 	int stackIdx = 0;
 	stack[stackIdx++] = 0; 
 	Vector3Df hitpoint;

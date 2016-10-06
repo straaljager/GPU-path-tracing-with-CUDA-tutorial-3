@@ -55,7 +55,7 @@ bool buffer_reset = false;
 void Timer(int obsolete) {
 
 	glutPostRedisplay();
-	glutTimerFunc(30, Timer, 0);
+	glutTimerFunc(10, Timer, 0);
 }
 
 __device__ float timer = 0.0f;

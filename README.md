@@ -1,6 +1,6 @@
-* GPU path tracing tutorial 3 
-* implementing a BVH acceleration structure on the GPU
-* by Sam lapere, 2016
+GPU path tracing tutorial 3 
+Implementing a BVH acceleration structure on the GPU
+by Sam lapere, 2016
 
 More info and screenshots on 
 
